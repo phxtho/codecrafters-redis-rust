@@ -10,7 +10,7 @@ pub enum RedisType {
 }
 
 pub struct Parsed {
-    redis_type: RedisType,
+    pub redis_type: RedisType,
     bytes_read: usize,
 }
 
