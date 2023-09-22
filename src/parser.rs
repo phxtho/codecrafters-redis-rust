@@ -4,7 +4,7 @@ mod util;
 
 pub enum RedisType {
     Array(Vec<RedisType>),
-    BulkString(Option<Vec<u8>>),
+    BulkString(String),
     Error(String),
     Integer(i64),
     SimpleString(String),
@@ -21,9 +21,9 @@ pub fn parse_resp(buffer: Vec<u8>) -> Result<Parsed> {
     match first_byte {
         b'+' => parse_simple_string(buffer),
         b':' => parse_integer(buffer),
-        // b'-' => parse_error(bytes),
-        // b'$' => parse_bulk_string(bytes),
+        b'$' => parse_bulk_string(buffer),
         // b'*' => parse_array(bytes),
+        // b'-' => parse_error(bytes),
         _ => panic!("Invalid RESP type"),
     }
 }
@@ -72,7 +72,38 @@ fn test_parsing_negative_integer() {
     }
 }
 
-// fn parse_bulk_string(buffer: &[u8]) -> Result<Parsed> {}
+// <length>\r\n<data>\r\n
+fn parse_bulk_string(buffer: &[u8]) -> Result<Parsed> {
+    let parsed_len = parse_integer(buffer)?;
+    let len = match parsed_len.redis_type {
+        RedisType::Integer(int) => int,
+        _ => return Err(Error::msg("Bulk string length incorrect redis type")),
+    };
+
+    let mut bytes_read = parsed_len.bytes_read + 2;
+
+    let str_data = &buffer[bytes_read..bytes_read + len as usize];
+    let out_str = std::str::from_utf8(str_data)?.to_string();
+
+    bytes_read += len as usize;
+
+    Ok(Parsed {
+        redis_type: RedisType::BulkString(out_str),
+        bytes_read: bytes_read,
+    })
+}
+
+#[test]
+fn test_parse_bulk_string() {
+    let parsed = parse_bulk_string(b"5\r\nhello\r\n").unwrap();
+    match parsed.redis_type {
+        RedisType::BulkString(str) => {
+            assert_eq!(str, "hello");
+            assert_eq!(parsed.bytes_read, 8)
+        }
+        _ => panic!("Incorrect type")
+    }
+}
 
 // *<number-of-elements>\r\n<element-1>...<element-n>
 // fn parse_array(bytes: Vec<u8>) -> Vec<Resp> {}
