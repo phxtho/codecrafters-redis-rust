@@ -1,7 +1,10 @@
 // Uncomment this block to pass the first stage
 // use std::net::TcpListener;
 
-fn main() {
+mod parser;
+
+#[tokio::main]
+async fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!");
 
@@ -19,4 +22,30 @@ fn main() {
     //         }
     //     }
     // }
+}
+
+async fn process(mut stream: TcpStream) {
+    println!("Accepted new connection");
+    let mut buffer = [0; 1024];
+    loop {
+        match stream.read(&mut buffer).await {
+            Ok(0) => break,
+            Ok(n) => {
+                println!("Read {} bytes", n);
+                parser::parse_resp(Vec::from(buffer));
+                stream
+                    .write_all(b"+PONG\r\n")
+                    .await
+                    .expect("Failed to write");
+                buffer = [0; 1024] // reset buffer
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                continue;
+            }
+            Err(e) => {
+                println!("Stream Error: {}", e);
+                break;
+            }
+        }
+    }
 }
