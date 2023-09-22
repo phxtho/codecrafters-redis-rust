@@ -5,7 +5,6 @@ mod util;
 pub enum RedisType {
     Array(Vec<RedisType>),
     BulkString(String),
-    Error(String),
     Integer(i64),
     SimpleString(String),
 }
@@ -15,17 +14,19 @@ pub struct Parsed {
     bytes_read: usize,
 }
 
-pub fn parse_resp(buffer: Vec<u8>) -> Result<Parsed> {
-    let first_byte = buffer[0];
-    let buffer = &buffer[1..];
-    match first_byte {
-        b'+' => parse_simple_string(buffer),
-        b':' => parse_integer(buffer),
-        b'$' => parse_bulk_string(buffer),
-        // b'*' => parse_array(bytes),
-        // b'-' => parse_error(bytes),
+pub fn parse_resp(buffer: &[u8]) -> Result<Parsed> {
+    let parsed = match buffer[0] {
+        b'+' => parse_simple_string(&buffer[1..]),
+        b':' => parse_integer(&buffer[1..]),
+        b'$' => parse_bulk_string(&buffer[1..]),
+        b'*' => parse_array(&buffer[1..]),
         _ => panic!("Invalid RESP type"),
-    }
+    }?;
+
+    Ok(Parsed {
+        redis_type: parsed.redis_type,
+        bytes_read: parsed.bytes_read + 1, // account for reading the first byte
+    })
 }
 
 fn parse_simple_string(buffer: &[u8]) -> Result<Parsed> {
@@ -101,9 +102,49 @@ fn test_parse_bulk_string() {
             assert_eq!(str, "hello");
             assert_eq!(parsed.bytes_read, 8)
         }
-        _ => panic!("Incorrect type")
+        _ => panic!("Expected bulk string type"),
     }
 }
 
-// *<number-of-elements>\r\n<element-1>...<element-n>
-// fn parse_array(bytes: Vec<u8>) -> Vec<Resp> {}
+// <number-of-elements>\r\n<element-1>...<element-n>
+fn parse_array(buffer: &[u8]) -> Result<Parsed> {
+    let parsed_len = parse_integer(buffer)?;
+    let len = match parsed_len.redis_type {
+        RedisType::Integer(int) => int,
+        _ => return Err(Error::msg("Array length is incorrect redis type")),
+    };
+
+    let mut bytes_read = parsed_len.bytes_read as usize + 2;
+    let mut out_vec: Vec<RedisType> = Vec::new();
+
+    for _ in 0..len {
+        let parsed_elem = parse_resp(&buffer[bytes_read..]);
+        match parsed_elem {
+            Ok(elem) => {
+                out_vec.push(elem.redis_type);
+                bytes_read += elem.bytes_read + 2;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+
+    return Ok(Parsed {
+        redis_type: RedisType::Array(out_vec),
+        bytes_read: bytes_read,
+    });
+}
+
+#[test]
+fn test_parse_array() {
+    let parsed = parse_array(b"2\r\n$5\r\nhello\r\n$5\r\nworld\r\n").unwrap();
+    match parsed.redis_type {
+        RedisType::Array(arr) => {
+            assert_eq!(arr.len(), 2);
+            match &arr[0] {
+                RedisType::BulkString(str) => assert_eq!(str, "hello"),
+                _ => panic!("Expected bulk string type"),
+            };
+        }
+        _ => panic!("Expected array type"),
+    }
+}

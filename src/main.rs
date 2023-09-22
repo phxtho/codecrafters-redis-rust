@@ -32,7 +32,7 @@ async fn process(mut stream: TcpStream) {
             Ok(0) => break,
             Ok(n) => {
                 println!("Read {} bytes", n);
-                parser::parse_resp(Vec::from(buffer));
+                parser::parse_resp(&buffer);
                 stream
                     .write_all(b"+PONG\r\n")
                     .await
