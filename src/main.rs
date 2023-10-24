@@ -1,4 +1,5 @@
-use parser::RedisType;
+use async_recursion::async_recursion;
+use parser::{parse_resp, RedisType};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
@@ -27,21 +28,25 @@ async fn main() {
     }
 }
 
-fn process_command(parsed: RedisType) -> String {
+#[async_recursion]
+async fn process_command(parsed: RedisType, stream: &mut TcpStream) {
     match parsed {
         RedisType::Array(elements) => match elements.first() {
             Some(RedisType::SimpleString(str)) | Some(RedisType::BulkString(str)) => {
                 match str.to_uppercase().as_ref() {
                     "PING" => {
-                        return String::from("+PONG\r\n");
+                        stream.write(b"+PONG\r\n").await.unwrap();
                     }
                     "ECHO" => match elements.get(1) {
                         Some(RedisType::BulkString(str)) => {
-                            return str.clone();
+                            stream.write(str.as_bytes()).await.unwrap();
                         }
-                        _ => panic!("Commands should be an array of bulk strings"),
+                        _ => panic!("Echo should contain bulk strings"),
                     },
-                    _ => panic!("Unknown cmd {}", str.to_uppercase()),
+                    _ => match parse_resp(str.as_bytes()) {
+                        Ok(subcommand) => process_command(subcommand.redis_type, stream).await,
+                        Err(_) => panic!("Could not parse subcommand {}", str),
+                    },
                 }
             }
             _ => panic!("Commands should be an array of bulk strings"),
@@ -59,11 +64,7 @@ async fn handle_connection(mut stream: TcpStream) {
             Ok(_) => {
                 match parser::parse_resp(&buffer) {
                     Ok(parsed_input) => {
-                        let res = process_command(parsed_input.redis_type);
-                        stream
-                            .write(res.as_bytes())
-                            .await
-                            .expect("failed to respond");
+                        process_command(parsed_input.redis_type, &mut stream).await;
                     }
                     Err(_) => {
                         stream.write(b"Error\r\n").await.expect("failed to respond");

@@ -32,7 +32,7 @@ pub fn parse_resp(buffer: &[u8]) -> Result<Parsed> {
 fn parse_simple_string(buffer: &[u8]) -> Result<Parsed> {
     let bytes_read = util::read_until_crlf(buffer).unwrap();
 
-    let out_str = std::str::from_utf8(bytes_read)?.to_string();
+    let out_str = util::to_string(bytes_read).unwrap();
     return Ok(Parsed {
         bytes_read: bytes_read.len(),
         redis_type: RedisType::SimpleString(out_str),
@@ -85,7 +85,7 @@ fn parse_bulk_string(buffer: &[u8]) -> Result<Parsed> {
 
     let str_data = &buffer[bytes_read..bytes_read + len as usize];
 
-    let out_str = std::str::from_utf8(str_data)?.to_string();
+    let out_str = util::to_string(str_data).unwrap();
 
     bytes_read += len as usize;
 
