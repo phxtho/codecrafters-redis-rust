@@ -39,7 +39,9 @@ async fn process_command(parsed: RedisType, stream: &mut TcpStream) {
                     }
                     "ECHO" => match elements.get(1) {
                         Some(RedisType::BulkString(str)) => {
-                            stream.write(str.as_bytes()).await.unwrap();
+                            let mut out = str.clone();
+                            out.insert_str(out.len(), "\r\n");
+                            stream.write(out.as_bytes()).await.unwrap();
                         }
                         _ => panic!("Echo should contain bulk strings"),
                     },
