@@ -1,5 +1,8 @@
-// Uncomment this block to pass the first stage
-// use std::net::TcpListener;
+use parser::RedisType;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 
 mod parser;
 
@@ -8,20 +11,20 @@ async fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!");
 
-    // Uncomment this block to pass the first stage
-    //
-    // let listener = TcpListener::bind("127.0.0.1:6379").unwrap();
-    //
-    // for stream in listener.incoming() {
-    //     match stream {
-    //         Ok(_stream) => {
-    //             println!("accepted new connection");
-    //         }
-    //         Err(e) => {
-    //             println!("error: {}", e);
-    //         }
-    //     }
-    // }
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:6379")
+        .await
+        .expect("failed bind to port");
+
+    loop {
+        match listener.accept().await {
+            Ok((stream, _)) => {
+                tokio::spawn(async move { handle_connection(stream).await });
+            }
+            Err(e) => {
+                println!("Listener Error: {}", e);
+            }
+        }
+    }
 }
 
 fn process_command(parsed: RedisType) -> String {
