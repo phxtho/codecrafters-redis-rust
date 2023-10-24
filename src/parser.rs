@@ -84,6 +84,7 @@ fn parse_bulk_string(buffer: &[u8]) -> Result<Parsed> {
     let mut bytes_read = parsed_len.bytes_read + 2;
 
     let str_data = &buffer[bytes_read..bytes_read + len as usize];
+
     let out_str = std::str::from_utf8(str_data)?.to_string();
 
     bytes_read += len as usize;
@@ -97,6 +98,18 @@ fn parse_bulk_string(buffer: &[u8]) -> Result<Parsed> {
 #[test]
 fn test_parse_bulk_string() {
     let parsed = parse_bulk_string(b"5\r\nhello\r\n").unwrap();
+    match parsed.redis_type {
+        RedisType::BulkString(str) => {
+            assert_eq!(str, "hello");
+            assert_eq!(parsed.bytes_read, 8)
+        }
+        _ => panic!("Expected bulk string type"),
+    }
+}
+
+#[test]
+fn test_parse_2_bulk_string() {
+    let parsed = parse_bulk_string(b"5\r\nhello\r\n$3\r\nhey\r\n").unwrap();
     match parsed.redis_type {
         RedisType::BulkString(str) => {
             assert_eq!(str, "hello");

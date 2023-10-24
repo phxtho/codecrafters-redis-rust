@@ -38,7 +38,7 @@ fn process_command(parsed: RedisType) -> String {
                         }
                         _ => panic!("Commands should be an array of bulk strings"),
                     },
-                    _ => panic!("Unknown cmd"),
+                    _ => panic!("Unknown cmd {}", str.to_uppercase()),
                 }
             }
             _ => panic!("Commands should be an array of bulk strings"),
